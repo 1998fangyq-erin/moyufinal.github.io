@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>社畜摸鱼消消乐</title>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <style>
+        body, html { margin: 0; padding: 0; background-color: #e9ecef; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; overflow: hidden; overscroll-behavior: none; touch-action: none; }
+        #gameContainer { width: 100%; max-width: 520px; display: flex; flex-direction: column; background-color: #f4f4f4; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
+        #uiHeader { padding: 15px 20px 10px; background-color: #fff; border-bottom: 2px solid #e0e0e0; box-shadow: 0 4px 10px rgba(0,0,0,0.05); z-index: 10; }
+        .ui-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 16px; color: #333; font-weight: bold; }
+        .ui-actions { display: flex; justify-content: space-between; margin-top: 15px; gap: 15px; }
+        #bossKeyBtn, #shuffleBtn { flex: 1; padding: 10px 0; color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.2); cursor: pointer; }
+        #bossKeyBtn { background-color: #dc3545; } #bossKeyBtn:active { background-color: #c82333; transform: translateY(2px); }
+        #shuffleBtn { background-color: #007bff; } #shuffleBtn:active { background-color: #0056b3; transform: translateY(2px); }
+        #shuffleBtn:disabled { background-color: #999; cursor: not-allowed; transform: none; box-shadow: none; }
+        canvas { display: block; cursor: pointer; width: 100%; height: auto; touch-action: none; -webkit-tap-highlight-color: transparent; }
+        
+        /* 摸鱼指南弹窗 */
+        #ruleModal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 100; }
+        .modal-content { background-color: #fff; padding: 25px 20px; border-radius: 12px; width: 75%; max-width: 320px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.3); box-sizing: border-box; }
+        .modal-content h2 { margin-top: 0; color: #333; font-size: 24px; }
+        .modal-content p { color: #555; font-size: 16px; line-height: 1.6; text-align: left; margin-bottom: 20px; }
+        #startBtn { padding: 12px 0; font-size: 18px; font-weight: bold; color: white; background-color: #5cb85c; border: none; border-radius: 8px; cursor: pointer; width: 100%; box-shadow: 0 4px 6px rgba(92, 184, 92, 0.3); transition: background-color 0.2s; }
+        #startBtn:active { background-color: #4cae4c; transform: translateY(2px); }
+        
+        /* 紧急避险 Excel 伪装层 */
+        #fakeWorkScreen { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #fff; z-index: 999; font-family: 'Microsoft YaHei', sans-serif; padding: 20px; box-sizing: border-box; color: #333; }
+        .fake-header { border-bottom: 3px solid #217346; padding-bottom: 10px; margin-bottom: 20px; color: #217346; font-size: 18px; font-weight: bold; display: flex; align-items: center; }
+        .fake-table { width: 100%; max-width: 800px; border-collapse: collapse; margin: 0 auto; font-size: 14px; }
+        .fake-table th, .fake-table td { border: 1px solid #d4d4d4; padding: 12px 8px; text-align: left; }
+        .fake-table th { background-color: #f3f2f1; font-weight: normal; color: #666; }
+        
+        /* Excel 底部选项卡 */
+        .excel-tabs { position: absolute; bottom: 0; left: 0; width: 100%; display: flex; background-color: #f3f2f1; border-top: 1px solid #d4d4d4; }
+        .excel-tabs .tab { padding: 12px 20px; font-size: 14px; color: #666; cursor: pointer; border-right: 1px solid #d4d4d4; flex: 1; text-align: center; }
+        .excel-tabs .tab.active { background-color: #fff; border-top: 3px solid #217346; color: #217346; font-weight: bold; }
+
+        /* --- 战报海报样式 --- */
+        #resultModal { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.85); display: none; justify-content: center; align-items: center; z-index: 200; }
+        .poster-card { background: #fff; border-radius: 16px; width: 80%; max-width: 320px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5); overflow: hidden; display: flex; flex-direction: column; }
+        
+        /* 截图专区 */
+        #captureArea { padding: 30px 20px 15px; background: #fff; position: relative; }
+        .poster-title { font-size: 28px; font-weight: bold; margin: 0 0 10px 0; color: #333; }
+        .poster-score { font-size: 52px; font-weight: bold; color: #f0ad4e; margin: 5px 0; line-height: 1; text-shadow: 2px 2px 0px rgba(240,173,78,0.2); }
+        .poster-high { font-size: 14px; color: #888; margin-bottom: 20px; font-weight: bold; }
+        .poster-comment { font-size: 16px; color: #555; background: #f4f4f4; padding: 12px; border-radius: 8px; line-height: 1.5; border-left: 4px solid #5cb85c; text-align: left; white-space: pre-wrap; margin-bottom: 5px; }
+        .screenshot-hint { font-size: 12px; color: #aaa; margin-top: 15px; font-weight: bold; }
+        
+        /* 按钮专区 */
+        .poster-btn-group { padding: 0 20px 20px; background: #fff; }
+        .poster-btn { padding: 12px 0; font-size: 18px; font-weight: bold; color: white; border: none; border-radius: 8px; cursor: pointer; width: 100%; margin-top: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .btn-green { background-color: #5cb85c; } .btn-gray { background-color: #6c757d; }
+        .new-record { position: absolute; top: 10px; right: 10px; background: #dc3545; color: white; padding: 6px 12px; border-radius: 20px; font-size: 14px; font-weight: bold; transform: rotate(15deg); box-shadow: 0 4px 10px rgba(220,53,69,0.4); }
+        @keyframes pop { 0% { transform: scale(0) rotate(15deg); } 80% { transform: scale(1.1) rotate(15deg); } 100% { transform: scale(1) rotate(15deg); } }
+        .screenshot-hint { font-size: 12px; color: #aaa; margin-top: 5px; }
+    </style>
+</head>
+<body>
+<div id="gameContainer">
+    <div id="uiHeader">
+        <div class="ui-row">
+            <div id="uiLevel" style="color: #666;">第 1 关</div>
+            <div id="uiTarget" style="color: #666;">目标: 0</div>
+        </div>
+        <div class="ui-row">
+            <div id="uiScore" style="font-size: 22px;">得分: 0</div>
+            <div id="uiTime" style="font-size: 22px;">时间: 60s</div>
+        </div>
+        <div id="uiActions" class="ui-actions" style="display: none;">
+            <button id="shuffleBtn">🔀 洗牌 (5)</button>
+            <button id="bossKeyBtn">⏸️ 老板来了</button>
+        </div>
+    </div>
+    <canvas id="gameCanvas" width="520" height="520"></canvas>
+<div id="ruleModal">
+        <div class="modal-content">
+            <h2>摸鱼指南</h2>
+            <p>经典的对对碰玩法，滑动相邻图案交换消除。<br><br><strong>分数规则：</strong><br>📱 玩手机 = <strong>+100分</strong><br>👹 躲老板 = <strong style="color:#d9534f;">+50分</strong><br>☕ 其他日常 = +10分<br><br>在倒计时结束前达到目标即为<strong>摸鱼成功</strong>！</p>
+            <button id="startBtn">开始摸鱼</button>
+        </div>
+    </div>
+
+   <div id="resultModal">
+        <div class="poster-card">
+            
+            <div id="captureArea" style="padding: 30px 20px 20px; background: #fff; position: relative;">
+                <div id="newRecordBadge" class="new-record" style="display: none;">🎉 新纪录!</div>
+                <h2 class="poster-title" id="posterTitle">摸鱼战报</h2>
+                <div class="poster-score" id="posterScore">0</div>
+                <div class="poster-high" id="posterHigh">🏆 历史最高: 0</div>
+                <div class="poster-comment" id="posterComment" style="margin-bottom: 0;">评语...</div>
+            </div>
+
+            <img id="shareImage" style="display: none; width: 100%; height: auto; pointer-events: auto;">
+            
+            <div class="poster-btn-group" style="padding-top: 15px;">
+                <div class="screenshot-hint" style="margin-bottom: 15px; margin-top: 0; font-size: 13px; color: #888;">👆 长按上方保存战报，发群里装杯</div>
+                <button id="nextLevelBtn" class="poster-btn btn-green">继续挑战 (第2关)</button>
+                <button id="restartResultBtn" class="poster-btn btn-gray">再摸一次</button>
+            </div>
+
+        </div>
+    </div>
+
+<div id="fakeWorkScreen">
+    <div class="fake-header"><span style="margin-right: 10px;">📊</span> Q1 季度各部门业务数据核算表.xlsx</div>
+    <table class="fake-table">
+        <tr><th>部门</th><th>1月营收</th><th>2月营收</th><th>3月预期</th><th>环比增长</th></tr>
+        <tr><td>市场部</td><td>¥ 125,000</td><td>¥ 132,000</td><td>¥ 145,000</td><td style="color: #217346;">+9.8%</td></tr>
+        <tr><td>运营部</td><td>¥ 85,000</td><td>¥ 88,000</td><td>¥ 92,000</td><td style="color: #217346;">+4.5%</td></tr>
+        <tr><td>研发部</td><td>--</td><td>--</td><td>--</td><td>--</td></tr>
+        <tr><td>总计</td><td>¥ 210,000</td><td>¥ 220,000</td><td>¥ 237,000</td><td style="color: #217346;">+7.7%</td></tr>
+    </table>
+    <div class="excel-tabs">
+        <div id="resumeBtn" class="tab active">📊 Sheet1 (双击继续)</div>
+        <div id="restartBtn" class="tab">⚠️ Sheet2 (放弃重开)</div>
+    </div>
+</div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let ROWS = 8;
+    let COLS = 8;
+    let TILE_SIZE = 60;
+    const OFFSET_X = 20;  
+    let OFFSET_Y = 20; 
+    
+    let currentLevel = 1;
+    const LEVEL_CONFIG = {
+        1: { time: 20, target: 500, emojis: ['☕', '⌨️', '📊', '🧧', '📱', '👹'], rows: 8, cols: 8, tileSize: 60 },
+        2: { time: 180, target: 6666, emojis: ['☕', '⌨️', '📊', '🧧', '📱', '👹', '📁', '🖨️', '💼'], rows: 10, cols: 10, tileSize: 50 },
+        3: { time: 240, target: Infinity, emojis: ['☕', '⌨️', '📊', '🧧', '📱', '👹', '📁', '🖨️', '💼'], rows: 10, cols: 10, tileSize: 50 }
+    };
+    
+    let EMOJIS = LEVEL_CONFIG[1].emojis; 
+    let targetScore = 0;
+    let grid = [];
+    let state = 'START'; 
+    let previousState = 'PLAY';
+    let score = 0;
+    let timeLeft = 60;
+    let selectedTile = null;
+    let swapCheck = null;
+    let floatingTexts = [];
+    let timerInterval = null;
+    let shuffleCount = 5; 
+    let bestScore = parseInt(localStorage.getItem('moyu_best_score')) || 0; 
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let isSwiping = false;
+    const SWIPE_THRESHOLD = 30;
+
+    // 👇 在这里加载了背景音乐和滴滴声
+    const bgmAudio = new Audio('bgm.mp3');
+    bgmAudio.loop = true; // BGM 洗脑循环
+    bgmAudio.volume = 0.5; // 音量调到 50%
+    const alertAudio = new Audio('alert.mp3');
+    alertAudio.volume = 0.8; // 倒计时警报稍微大一点
+
+    function drawSafeRoundRect(ctx, x, y, width, height, radius) {
+        ctx.beginPath(); ctx.moveTo(x + radius, y); ctx.lineTo(x + width - radius, y); ctx.quadraticCurveTo(x + width, y, x + width, y + radius); ctx.lineTo(x + width, y + height - radius); ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height); ctx.lineTo(x + radius, y + height); ctx.quadraticCurveTo(x, y + height, x, y + height - radius); ctx.lineTo(x, y + radius); ctx.quadraticCurveTo(x, y, x + radius, y); ctx.closePath(); ctx.fill();
+    }
+
+    class Tile {
+        constructor(r, c, type, startY) {
+            this.r = r; this.c = c; this.type = type;
+            this.x = OFFSET_X + c * TILE_SIZE; this.y = startY !== undefined ? startY : (OFFSET_Y + r * TILE_SIZE);
+            this.targetX = OFFSET_X + c * TILE_SIZE; this.targetY = OFFSET_Y + r * TILE_SIZE;
+            this.scale = 1; this.isMatched = false;
+        }
+        update() {
+            this.x += (this.targetX - this.x) * 0.25; this.y += (this.targetY - this.y) * 0.25;
+            if (this.isMatched) { this.scale -= 0.15; if(this.scale < 0) this.scale = 0; }
+        }
+        draw(ctx) {
+            if (this.scale <= 0) return;
+            ctx.save(); ctx.translate(this.x + TILE_SIZE / 2, this.y + TILE_SIZE / 2); ctx.scale(this.scale, this.scale);
+            ctx.font = `${TILE_SIZE * 0.65}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(this.type, 0, TILE_SIZE * 0.08); ctx.restore();
+        }
+    }
+
+    class FloatingText {
+        constructor(x, y, text, color) { this.x = x; this.y = y; this.text = text; this.color = color; this.life = 1.0; }
+        update() { this.y -= 2; this.life -= 0.03; }
+        draw(ctx) {
+            ctx.save(); ctx.globalAlpha = Math.max(0, this.life); ctx.fillStyle = this.color;
+            ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+            ctx.strokeText(this.text, this.x, this.y); ctx.fillText(this.text, this.x, this.y); ctx.restore();
+        }
+    }
+function initGrid() {
+        grid = [];
+        for (let r = 0; r < ROWS; r++) {
+            grid[r] = [];
+            for (let c = 0; c < COLS; c++) {
+                let type;
+                do { type = EMOJIS[Math.floor(Math.random() * EMOJIS.length)]; } 
+                while ( (c >= 2 && grid[r][c-1].type === type && grid[r][c-2].type === type) || (r >= 2 && grid[r-1][c].type === type && grid[r-2][c].type === type) );
+                grid[r][c] = new Tile(r, c, type);
+            }
+        }
+    }
+
+    function doShuffle() {
+        if (shuffleCount <= 0 || state !== 'PLAY') return; 
+        shuffleCount--; 
+        const shuffleBtn = document.getElementById('shuffleBtn');
+        shuffleBtn.innerText = `🔀 洗牌 (${shuffleCount})`;
+        if (shuffleCount === 0) shuffleBtn.disabled = true; 
+        initGrid();
+        for (let r = 0; r < ROWS; r++) { for (let c = 0; c < COLS; c++) { if (grid[r][c]) { grid[r][c].y -= (ROWS * TILE_SIZE + 300); } } }
+        state = 'ANIMATING'; 
+    }
+
+    function getMatches() {
+        let matched = new Set();
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS - 2; c++) {
+                let t1 = grid[r][c], t2 = grid[r][c+1], t3 = grid[r][c+2];
+                if (t1 && t2 && t3 && t1.type === t2.type && t2.type === t3.type) {
+                    matched.add(t1); matched.add(t2); matched.add(t3);
+                    let cc = c + 3; while (cc < COLS && grid[r][cc] && grid[r][cc].type === t1.type) { matched.add(grid[r][cc]); cc++; }
+                }
+            }
+        }
+        for (let c = 0; c < COLS; c++) {
+            for (let r = 0; r < ROWS - 2; r++) {
+                let t1 = grid[r][c], t2 = grid[r+1][c], t3 = grid[r+2][c];
+                if (t1 && t2 && t3 && t1.type === t2.type && t2.type === t3.type) {
+                    matched.add(t1); matched.add(t2); matched.add(t3);
+                    let rr = r + 3; while (rr < ROWS && grid[rr][c] && grid[rr][c].type === t1.type) { matched.add(grid[rr][c]); rr++; }
+                }
+            }
+        }
+        return Array.from(matched);
+    }
+
+    function doSwap(t1, t2) {
+        grid[t1.r][t1.c] = t2; grid[t2.r][t2.c] = t1;
+        let tempR = t1.r, tempC = t1.c; t1.r = t2.r; t1.c = t2.c; t2.r = tempR; t2.c = tempC;
+        t1.targetX = OFFSET_X + t1.c * TILE_SIZE; t1.targetY = OFFSET_Y + t1.r * TILE_SIZE;
+        t2.targetX = OFFSET_X + t2.c * TILE_SIZE; t2.targetY = OFFSET_Y + t2.r * TILE_SIZE;
+        selectedTile = null; state = 'ANIMATING'; swapCheck = { t1, t2 }; 
+    }
+
+    function checkAndProcessMatches() {
+        let matches = getMatches();
+        if (matches.length === 0) {
+            if (swapCheck) { doSwap(swapCheck.t1, swapCheck.t2); swapCheck = null; } else { state = 'PLAY'; }
+        } else {
+            swapCheck = null;
+            matches.forEach(t => {
+                t.isMatched = true;
+                let pts = 10; let color = '#5cb85c'; let text = '+10';
+                if (t.type === '📱') { pts = 100; color = '#f0ad4e'; text = '+100'; } else if (t.type === '👹') { pts = 50; color = '#d9534f'; text = '+50'; }
+                score += pts; floatingTexts.push(new FloatingText(t.x + TILE_SIZE/2, t.y + TILE_SIZE/2, text, color));
+            });
+            if (score < 0) score = 0; state = 'REMOVING';
+        }
+    }
+
+    function removeMatchedAndFall() {
+        for (let r = 0; r < ROWS; r++) { for (let c = 0; c < COLS; c++) { if (grid[r][c] && grid[r][c].isMatched) grid[r][c] = null; } }
+        for (let c = 0; c < COLS; c++) {
+            let emptySpots = 0;
+            for (let r = ROWS - 1; r >= 0; r--) {
+                if (grid[r][c] === null) { emptySpots++; } else if (emptySpots > 0) {
+                    let tile = grid[r][c]; grid[r + emptySpots][c] = tile; grid[r][c] = null;
+                    tile.r = r + emptySpots; tile.targetY = OFFSET_Y + tile.r * TILE_SIZE;
+                }
+            }
+            for (let i = 0; i < emptySpots; i++) {
+                let type = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+                let newTile = new Tile(i, c, type, OFFSET_Y - (emptySpots - i) * TILE_SIZE); grid[i][c] = newTile;
+            }
+        }
+        state = 'ANIMATING'; 
+    }
+
+    function update() {
+        if (state === 'PAUSED' || state === 'GAMEOVER') return; 
+        let isAnyAnimating = false;
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                if (grid[r][c]) {
+                    grid[r][c].update();
+                    if (Math.abs(grid[r][c].x - grid[r][c].targetX) > 0.5 || Math.abs(grid[r][c].y - grid[r][c].targetY) > 0.5) { isAnyAnimating = true; }
+                    if (grid[r][c].isMatched && grid[r][c].scale > 0) isAnyAnimating = true;
+                }
+            }
+        }
+        floatingTexts = floatingTexts.filter(ft => ft.life > 0); floatingTexts.forEach(ft => ft.update());
+        if (!isAnyAnimating) { if (state === 'ANIMATING') checkAndProcessMatches(); else if (state === 'REMOVING') removeMatchedAndFall(); }
+    }
+
+    function draw() {
+        ctx.fillStyle = '#f4f4f4'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        document.getElementById('uiScore').innerText = `得分: ${score}`;
+        document.getElementById('uiTime').innerText = `时间: ${timeLeft}s`;
+        document.getElementById('uiTime').style.color = timeLeft <= 10 ? '#d9534f' : '#333';
+        document.getElementById('uiLevel').innerText = `第 ${currentLevel} 关`;
+        document.getElementById('uiTarget').innerText = currentLevel === 3 ? '目标: 无尽' : `目标: ${targetScore}`;
+        
+        for (let r = 0; r < ROWS; r++) { for (let c = 0; c < COLS; c++) { ctx.fillStyle = '#e0e0e0'; drawSafeRoundRect(ctx, OFFSET_X + c * TILE_SIZE + 2, OFFSET_Y + r * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4, 8); } }
+        for (let r = 0; r < ROWS; r++) { for (let c = 0; c < COLS; c++) { if (grid[r][c]) grid[r][c].draw(ctx); } }
+        floatingTexts.forEach(ft => ft.draw(ctx));
+    }
+
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
+
+    // === 海报与截图生成逻辑 ===
+    function showGameOverPoster() {
+        // 👇 新增：游戏结束，全员静音！老板抓包不用配乐！
+        bgmAudio.pause();
+        alertAudio.pause();
+
+        document.getElementById('uiActions').style.display = 'none'; 
+        const modal = document.getElementById('resultModal');
+        const titleEl = document.getElementById('posterTitle');
+        const scoreEl = document.getElementById('posterScore');
+        const highEl = document.getElementById('posterHigh');
+        const commentEl = document.getElementById('posterComment');
+        const nextBtn = document.getElementById('nextLevelBtn');
+        const badge = document.getElementById('newRecordBadge');
+        
+        const captureArea = document.getElementById('captureArea');
+        const shareImage = document.getElementById('shareImage');
+
+        // 每次弹出前，先恢复显示文字区域，隐藏旧照片
+        captureArea.style.display = 'block';
+        shareImage.style.display = 'none';
+        scoreEl.innerText = score;
+        badge.style.display = 'none';
+
+        if (currentLevel === 3) {
+            titleEl.innerText = "无尽摸鱼战报";
+            if (score > bestScore) {
+                bestScore = score;
+                localStorage.setItem('moyu_best_score', bestScore);
+                badge.style.display = 'block'; 
+            }
+            highEl.innerText = `🏆 历史最高: ${bestScore}`;
+            
+            if (score < 6666) commentEl.innerText = "【一心工作】\n连第2关的分数都没达到，你是不是在偷偷内卷？";
+            else if (score < 8000) commentEl.innerText = "【带薪拉屎王者】\n厕所都被你蹲塌了！但这只是一般打工人的水平。";
+            else if (score < 9000) commentEl.innerText = "【摸鱼宗师】\n太熟练了，老板的羊毛已经被你薅秃了！";
+            else if (score < 10000) commentEl.innerText = "【摸鱼之神】\n公司没你迟早做大做强，建议直接原地退休！";
+            else commentEl.innerText = "【公司刺客】\n老板看到你的分数连夜跑路了，公司已被你摸破产！";
+            
+            nextBtn.innerText = "深藏功与名 (回第1关)";
+            nextBtn.style.display = 'block';
+        } else {
+            highEl.innerText = `🎯 目标分数: ${targetScore}`;
+            if (score >= targetScore) {
+                titleEl.innerText = "通关成功！";
+                commentEl.innerText = currentLevel === 1 ? "【初级摸鱼】\n热身完毕，敢不敢挑战难度巅峰？" : "【进阶摸鱼】\n太强了！已解锁终极无尽刷榜模式！";
+                nextBtn.innerText = `挑战 第${currentLevel + 1}关`;
+                nextBtn.style.display = 'block';
+            } else {
+                titleEl.innerText = "挑战失败";
+                commentEl.innerText = "【被当场抓获】\n老板盯着你呢，今晚留下来加班！";
+                nextBtn.style.display = 'none'; 
+            }
+        }
+        
+        // 1. 先把海报弹出来（必须显示在屏幕上才能截图）
+        modal.style.display = 'flex';
+
+        // 2. 延迟 100 毫秒，等排版稳定后，呼叫 html2canvas 拍照！
+        setTimeout(() => {
+            html2canvas(captureArea, {
+                scale: 2, // 将清晰度放大两倍
+                backgroundColor: "#ffffff"
+            }).then(canvas => {
+                // 将画板变成真实的 base64 图片数据
+                let imgData = canvas.toDataURL("image/png");
+                shareImage.src = imgData;
+                
+                // 偷天换日：隐藏文字 DOM，展示真正的图片！
+                captureArea.style.display = 'none';
+                shareImage.style.display = 'block';
+            });
+        }, 100);
+    }
+// === 交互逻辑 ===
+    function getLogicalCoordinates(e) {
+        let rect = canvas.getBoundingClientRect(); let scaleX = canvas.width / rect.width; let scaleY = canvas.height / rect.height;
+        let clientX, clientY; if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; } else { clientX = e.clientX || 0; clientY = e.clientY || 0; }
+        return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+    }
+
+    function handleTouchStart(e) {
+        if (state !== 'PLAY') return; // GAMEOVER 被海报遮挡，这里无需再判断
+        let coord = getLogicalCoordinates(e); let x = coord.x - OFFSET_X; let y = coord.y - OFFSET_Y;
+        let c = Math.floor(x / TILE_SIZE); let r = Math.floor(y / TILE_SIZE);
+        if (r >= 0 && r < ROWS && c >= 0 && c < COLS) { selectedTile = grid[r][c]; touchStartX = coord.x; touchStartY = coord.y; isSwiping = true; }
+    }
+
+    function handleTouchMove(e) { if (!isSwiping) return; if (e.cancelable) e.preventDefault(); }
+    function handleTouchEnd(e) {
+        if (!isSwiping || !selectedTile) { isSwiping = false; return; }
+        let rect = canvas.getBoundingClientRect(); let scaleX = canvas.width / rect.width; let scaleY = canvas.height / rect.height;
+        let clientX = e.changedTouches ? e.changedTouches[0].clientX : (e.clientX || 0); let clientY = e.changedTouches ? e.changedTouches[0].clientY : (e.clientY || 0);
+        let touchEndX = (clientX - rect.left) * scaleX; let touchEndY = (clientY - rect.top) * scaleY;
+        let dx = touchEndX - touchStartX; let dy = touchEndY - touchStartY;
+        if (Math.abs(dx) > SWIPE_THRESHOLD || Math.abs(dy) > SWIPE_THRESHOLD) {
+            let targetR = selectedTile.r; let targetC = selectedTile.c;
+            if (Math.abs(dx) > Math.abs(dy)) { targetC += (dx > 0) ? 1 : -1; } else { targetR += (dy > 0) ? 1 : -1; }
+            if (targetR >= 0 && targetR < ROWS && targetC >= 0 && targetC < COLS) { let targetTile = grid[targetR][targetC]; doSwap(selectedTile, targetTile); } else { selectedTile = null; }
+        } else { selectedTile = null; }
+        isSwiping = false;
+    }
+
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false }); canvas.addEventListener('touchmove', handleTouchMove, { passive: false }); canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+    canvas.addEventListener('mousedown', handleTouchStart); canvas.addEventListener('mousemove', (e) => { if(isSwiping) e.preventDefault(); }); canvas.addEventListener('mouseup', handleTouchEnd);
+
+    // 解决微信边缘滑动返回误触
+    document.addEventListener('touchstart', function(e) {
+        if (e.touches && e.touches.length > 0) {
+            let touchX = e.touches[0].clientX;
+            if (touchX < 30 || touchX > window.innerWidth - 30) { e.preventDefault(); }
+        }
+    }, { passive: false });
+
+    // === 自动存档系统 ===
+    function saveGame() {
+        if (state === 'START' || state === 'GAMEOVER') { localStorage.removeItem('moyu_save'); return; }
+        let simplifiedGrid = [];
+        for (let r = 0; r < ROWS; r++) { simplifiedGrid[r] = []; for (let c = 0; c < COLS; c++) { simplifiedGrid[r][c] = grid[r][c] ? grid[r][c].type : null; } }
+        
+        let saveData = { 
+            timestamp: Date.now(), 
+            currentLevel: currentLevel, 
+            score: score, 
+            timeLeft: timeLeft, 
+            shuffleCount: shuffleCount, 
+            state: state === 'PAUSED' ? 'PAUSED' : 'PLAY', 
+            previousState: previousState, 
+            grid: simplifiedGrid 
+        };
+        localStorage.setItem('moyu_save', JSON.stringify(saveData));
+    }
+
+    function loadGame() {
+        try {
+            let saveStr = localStorage.getItem('moyu_save');
+            if (!saveStr) return false; 
+            let saveData = JSON.parse(saveStr);
+            if (!saveData || !saveData.currentLevel) return false; 
+            
+            // 检查存档是否过期 (超过 60000 毫秒 = 1分钟)
+            if (!saveData.timestamp || (Date.now() - saveData.timestamp > 60000)) {
+                console.log("存档已过期或为旧版格式，重新开始教学流程");
+                localStorage.removeItem('moyu_save'); // 丢弃过期存档
+                return false; // 返回 false，让系统走正常开局
+            }
+            
+            currentLevel = saveData.currentLevel; let config = LEVEL_CONFIG[currentLevel];
+            EMOJIS = config.emojis; ROWS = config.rows; COLS = config.cols; TILE_SIZE = config.tileSize; targetScore = config.target;
+            score = saveData.score; timeLeft = saveData.timeLeft; shuffleCount = saveData.shuffleCount; state = saveData.state; previousState = saveData.previousState;
+
+            const shuffleBtn = document.getElementById('shuffleBtn');
+            shuffleBtn.innerText = `🔀 洗牌 (${shuffleCount})`; shuffleBtn.disabled = shuffleCount <= 0;
+            document.getElementById('uiActions').style.display = 'flex'; document.getElementById('ruleModal').style.display = 'none';
+
+            if (state === 'PAUSED') { document.getElementById('fakeWorkScreen').style.display = 'block'; }
+
+            grid = [];
+            for (let r = 0; r < ROWS; r++) {
+                grid[r] = [];
+                for (let c = 0; c < COLS; c++) {
+                    let type = saveData.grid[r][c] || EMOJIS[0]; 
+                    grid[r][c] = new Tile(r, c, type);
+                    grid[r][c].x = OFFSET_X + c * TILE_SIZE; grid[r][c].y = OFFSET_Y + r * TILE_SIZE;
+                    grid[r][c].targetX = grid[r][c].x; grid[r][c].targetY = grid[r][c].y;
+                }
+            }
+            startTimer(); return true;
+        } catch (e) { console.error("读取存档失败", e); localStorage.removeItem('moyu_save'); return false; }
+    }
+    
+    function startTimer() {
+        if (timerInterval) clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            if (state !== 'GAMEOVER' && state !== 'PAUSED' && state !== 'START') {
+                timeLeft--; saveGame(); 
+                
+                // 👇 新增：最后 10 秒倒计时“滴滴”声
+                if (timeLeft <= 10 && timeLeft > 0) {
+                    alertAudio.currentTime = 0; // 每次从头播放“滴”声
+                    alertAudio.play().catch(e => {}); // 捕获可能阻止播放的异常
+                }
+
+                if (timeLeft <= 0) { timeLeft = 0; state = 'GAMEOVER'; localStorage.removeItem('moyu_save'); showGameOverPoster(); }
+            }
+        }, 1000);
+    }
+
+    function startGame(level = 1) {
+        currentLevel = level; let config = LEVEL_CONFIG[currentLevel];
+        score = 0; timeLeft = config.time; targetScore = config.target;
+        EMOJIS = config.emojis; ROWS = config.rows; COLS = config.cols; TILE_SIZE = config.tileSize;
+        
+        shuffleCount = 5; const shuffleBtn = document.getElementById('shuffleBtn');
+        shuffleBtn.innerText = `🔀 洗牌 (${shuffleCount})`; shuffleBtn.disabled = false;
+        document.getElementById('uiActions').style.display = 'flex'; 
+        
+        state = 'PLAY'; selectedTile = null; swapCheck = null; floatingTexts = [];
+        
+        // 👇 播放洗脑神曲，重置滴滴声
+        bgmAudio.currentTime = 0; 
+        bgmAudio.play().catch(e => console.log("浏览器限制自动播放，需要用户交互")); 
+        alertAudio.pause();
+        
+        initGrid(); startTimer(); saveGame();
+    }
+
+    // === 按钮事件绑定 ===
+    document.getElementById('startBtn').addEventListener('click', () => { document.getElementById('ruleModal').style.display = 'none'; startGame(1); });
+    
+    document.getElementById('bossKeyBtn').addEventListener('click', () => { 
+        if (state !== 'GAMEOVER' && state !== 'START') { 
+            previousState = state; state = 'PAUSED'; 
+            document.getElementById('fakeWorkScreen').style.display = 'block'; 
+            saveGame(); 
+            
+            // 👇 老板来了，瞬间静音保命！
+            bgmAudio.pause();
+            alertAudio.pause();
+        } 
+    });
+    
+    document.getElementById('shuffleBtn').addEventListener('click', () => { doShuffle(); saveGame(); });
+
+    // 海报按钮
+    document.getElementById('nextLevelBtn').addEventListener('click', () => {
+        document.getElementById('resultModal').style.display = 'none';
+        if (currentLevel === 3) startGame(1); else startGame(currentLevel + 1);
+    });
+    document.getElementById('restartResultBtn').addEventListener('click', () => {
+        document.getElementById('resultModal').style.display = 'none'; startGame(currentLevel);
+    });
+
+    // Excel 底部伪装标签栏 (继续 / 重开)
+    let lastTapTime = 0;
+    document.getElementById('resumeBtn').addEventListener('click', () => {
+        let currentTime = new Date().getTime(); let tapLength = currentTime - lastTapTime;
+        if (tapLength < 500 && tapLength > 0) { 
+            document.getElementById('fakeWorkScreen').style.display = 'none'; 
+            state = previousState; 
+            saveGame(); 
+            
+            // 👇 警报解除，接着奏乐接着舞！
+            bgmAudio.play().catch(e => {});
+        }
+        lastTapTime = currentTime;
+    });
+    
+    document.getElementById('restartBtn').addEventListener('click', () => {
+        if (confirm('确定要放弃当前进度，重新开始本关吗？')) {
+            document.getElementById('fakeWorkScreen').style.display = 'none';
+            localStorage.removeItem('moyu_save'); startGame(currentLevel);
+        }
+    });
+
+    // 微信切出/重载避险
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden && (state === 'PLAY' || state === 'ANIMATING' || state === 'REMOVING')) {
+            previousState = state; state = 'PAUSED'; document.getElementById('fakeWorkScreen').style.display = 'block'; saveGame(); 
+            
+            // 👇 切到微信后台也要瞬间静音！
+            bgmAudio.pause();
+            alertAudio.pause();
+        }
+    });
+
+    // 游戏入口
+    if (!loadGame()) { initGrid(); state = 'START'; }
+    requestAnimationFrame(loop);
+
+</script>
+</body>
+</html>
